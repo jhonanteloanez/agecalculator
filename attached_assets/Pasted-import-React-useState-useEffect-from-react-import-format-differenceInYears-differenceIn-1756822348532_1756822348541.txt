@@ -1,0 +1,341 @@
+import React, { useState, useEffect } from 'react';
+import { format, differenceInYears, differenceInMonths, differenceInDays, differenceInHours, differenceInMinutes, differenceInSeconds, addYears } from 'date-fns';
+import { Calendar } from '@/components/ui/calendar';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { CalendarIcon, Calculator, Clock, Gift, MapPin } from 'lucide-react';
+import { cn } from '@/lib/utils';
+
+interface AgeResult {
+  years: number;
+  months: number;
+  days: number;
+  hours: number;
+  minutes: number;
+  seconds: number;
+  totalDays: number;
+  nextBirthday: Date;
+  daysUntilBirthday: number;
+  timeZone: string;
+  timeZoneOffset: string;
+}
+
+const AgeCalculator = () => {
+  const [birthDate, setBirthDate] = useState<Date | undefined>();
+  const [calculateToDate, setCalculateToDate] = useState<Date>(new Date());
+  const [result, setResult] = useState<AgeResult | null>(null);
+  const [liveAge, setLiveAge] = useState<AgeResult | null>(null);
+  const [timeZone, setTimeZone] = useState<string>('');
+  const [timeZoneOffset, setTimeZoneOffset] = useState<string>('');
+
+  useEffect(() => {
+    // Detect user's time zone
+    const detectedTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    setTimeZone(detectedTimeZone);
+    
+    // Get time zone offset
+    const now = new Date();
+    const offset = now.getTimezoneOffset();
+    const sign = offset > 0 ? '-' : '+';
+    const hours = Math.floor(Math.abs(offset) / 60);
+    const minutes = Math.abs(offset) % 60;
+    const offsetString = `${sign}${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+    setTimeZoneOffset(`UTC${offsetString}`);
+  }, []);
+
+  // Live age calculation that updates every second
+  useEffect(() => {
+    if (!birthDate) {
+      setLiveAge(null);
+      return;
+    }
+
+    const updateLiveAge = () => {
+      const now = new Date();
+      const calculatedAge = calculateAgeForDate(birthDate, now);
+      setLiveAge(calculatedAge);
+    };
+
+    // Update immediately
+    updateLiveAge();
+
+    // Set up interval to update every second
+    const interval = setInterval(updateLiveAge, 1000);
+
+    // Cleanup interval on unmount or when birthDate changes
+    return () => clearInterval(interval);
+  }, [birthDate, timeZone, timeZoneOffset]);
+
+  const calculateAgeForDate = (birth: Date, targetDate: Date): AgeResult => {
+    // Calculate exact age components
+    const years = differenceInYears(targetDate, birth);
+    const months = differenceInMonths(targetDate, birth) % 12;
+    
+    // Calculate remaining days after accounting for years and months
+    const yearMonthDate = new Date(birth);
+    yearMonthDate.setFullYear(birth.getFullYear() + years);
+    yearMonthDate.setMonth(birth.getMonth() + months);
+    const days = differenceInDays(targetDate, yearMonthDate);
+    
+    const hours = differenceInHours(targetDate, birth) % 24;
+    const minutes = differenceInMinutes(targetDate, birth) % 60;
+    const seconds = differenceInSeconds(targetDate, birth) % 60;
+    const totalDays = differenceInDays(targetDate, birth);
+
+    // Calculate next birthday
+    let nextBirthday = new Date(birth);
+    nextBirthday.setFullYear(targetDate.getFullYear());
+    
+    if (nextBirthday <= targetDate) {
+      nextBirthday = addYears(nextBirthday, 1);
+    }
+    
+    const daysUntilBirthday = differenceInDays(nextBirthday, targetDate);
+
+    return {
+      years,
+      months,
+      days,
+      hours,
+      minutes,
+      seconds,
+      totalDays,
+      nextBirthday,
+      daysUntilBirthday,
+      timeZone,
+      timeZoneOffset
+    };
+  };
+
+  const calculateAge = () => {
+    if (!birthDate) return;
+
+    const birth = new Date(birthDate);
+    const targetDate = new Date(calculateToDate);
+    const calculatedAge = calculateAgeForDate(birth, targetDate);
+    setResult(calculatedAge);
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-subtle p-4 md:p-8">
+      <div className="max-w-2xl mx-auto space-y-8">
+        {/* Header */}
+        <div className="text-center space-y-4">
+          <div className="w-16 h-16 mx-auto bg-gradient-primary rounded-2xl flex items-center justify-center shadow-button">
+            <Calculator className="w-8 h-8 text-primary-foreground" />
+          </div>
+          <div>
+            <h1 className="text-4xl font-bold text-foreground mb-2">Age Calculator</h1>
+            <p className="text-lg text-muted-foreground">Calculate your exact age with precision down to minutes</p>
+          </div>
+        </div>
+
+        {/* Input Card */}
+        <Card className="shadow-card border-0">
+          <CardHeader className="text-center pb-4">
+            <CardTitle className="text-2xl">Enter Your Details</CardTitle>
+            <CardDescription>
+              Select your birth date and target calculation date
+              {timeZone && (
+                <div className="flex items-center justify-center mt-2 text-sm text-muted-foreground">
+                  <MapPin className="w-4 h-4 mr-1" />
+                  Detected time zone: {timeZone} ({timeZoneOffset})
+                </div>
+              )}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* Birth Date */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-foreground">Date of Birth</label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      "w-full justify-start text-left font-normal h-12",
+                      !birthDate && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {birthDate ? format(birthDate, "MMMM d, yyyy") : "Select your birth date"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={birthDate}
+                    onSelect={setBirthDate}
+                    disabled={(date) => date > new Date()}
+                    initialFocus
+                    className="p-3 pointer-events-auto"
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            {/* Calculate To Date */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-foreground">Calculate Age On</label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start text-left font-normal h-12"
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {format(calculateToDate, "MMMM d, yyyy")}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={calculateToDate}
+                    onSelect={(date) => date && setCalculateToDate(date)}
+                    initialFocus
+                    className="p-3 pointer-events-auto"
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            {/* Calculate Button */}
+            <Button 
+              onClick={calculateAge}
+              disabled={!birthDate}
+              className="w-full h-12 bg-gradient-primary hover:opacity-90 shadow-button text-lg font-semibold"
+              size="lg"
+            >
+              <Calculator className="mr-2 h-5 w-5" />
+              Calculate My Age
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* Live Age Display */}
+        {liveAge && (
+          <Card className="shadow-card border-0 bg-gradient-primary text-primary-foreground">
+            <CardHeader className="text-center pb-4">
+              <CardTitle className="text-2xl flex items-center justify-center">
+                <Clock className="mr-2 h-6 w-6" />
+                Your Current Age (Live)
+              </CardTitle>
+              <CardDescription className="text-primary-foreground/80">
+                Updates every second • {format(new Date(), "MMMM d, yyyy 'at' h:mm:ss a")}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
+                <div className="text-center p-3 bg-white/10 rounded-lg backdrop-blur-sm">
+                  <div className="text-xl md:text-2xl font-bold">{liveAge.years}</div>
+                  <div className="text-xs md:text-sm opacity-90">Years</div>
+                </div>
+                <div className="text-center p-3 bg-white/10 rounded-lg backdrop-blur-sm">
+                  <div className="text-xl md:text-2xl font-bold">{liveAge.months}</div>
+                  <div className="text-xs md:text-sm opacity-90">Months</div>
+                </div>
+                <div className="text-center p-3 bg-white/10 rounded-lg backdrop-blur-sm">
+                  <div className="text-xl md:text-2xl font-bold">{liveAge.days}</div>
+                  <div className="text-xs md:text-sm opacity-90">Days</div>
+                </div>
+                <div className="text-center p-3 bg-white/10 rounded-lg backdrop-blur-sm">
+                  <div className="text-xl md:text-2xl font-bold animate-pulse">{liveAge.hours}</div>
+                  <div className="text-xs md:text-sm opacity-90">Hours</div>
+                </div>
+                <div className="text-center p-3 bg-white/10 rounded-lg backdrop-blur-sm">
+                  <div className="text-xl md:text-2xl font-bold animate-pulse">{liveAge.minutes}</div>
+                  <div className="text-xs md:text-sm opacity-90">Minutes</div>
+                </div>
+                <div className="text-center p-3 bg-white/10 rounded-lg backdrop-blur-sm">
+                  <div className="text-xl md:text-2xl font-bold animate-pulse">{liveAge.seconds}</div>
+                  <div className="text-xs md:text-sm opacity-90">Seconds</div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Results */}
+        {result && (
+          <div className="space-y-4">
+            {/* Main Age Result */}
+            <Card className="shadow-card border-0">
+              <CardHeader className="text-center">
+                <CardTitle className="text-2xl">Your Age</CardTitle>
+                <CardDescription>
+                  As of {format(calculateToDate, "MMMM d, yyyy")}
+                  <div className="flex items-center justify-center mt-2 text-sm">
+                    <MapPin className="w-4 h-4 mr-1" />
+                    {result.timeZone} ({result.timeZoneOffset})
+                  </div>
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+                  <div className="text-center p-4 bg-gradient-primary rounded-lg text-primary-foreground">
+                    <div className="text-2xl font-bold">{result.years}</div>
+                    <div className="text-sm opacity-90">Years</div>
+                  </div>
+                  <div className="text-center p-4 bg-muted rounded-lg">
+                    <div className="text-2xl font-bold text-foreground">{result.months}</div>
+                    <div className="text-sm text-muted-foreground">Months</div>
+                  </div>
+                  <div className="text-center p-4 bg-muted rounded-lg">
+                    <div className="text-2xl font-bold text-foreground">{result.days}</div>
+                    <div className="text-sm text-muted-foreground">Days</div>
+                  </div>
+                  <div className="text-center p-4 bg-muted rounded-lg">
+                    <div className="text-2xl font-bold text-foreground">{result.hours}</div>
+                    <div className="text-sm text-muted-foreground">Hours</div>
+                  </div>
+                  <div className="text-center p-4 bg-muted rounded-lg">
+                    <div className="text-2xl font-bold text-foreground">{result.minutes}</div>
+                    <div className="text-sm text-muted-foreground">Minutes</div>
+                  </div>
+                  <div className="text-center p-4 bg-muted rounded-lg">
+                    <div className="text-2xl font-bold text-foreground">{result.seconds}</div>
+                    <div className="text-sm text-muted-foreground">Seconds</div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Additional Stats */}
+            <div className="grid md:grid-cols-2 gap-4">
+              <Card className="shadow-card border-0">
+                <CardContent className="p-6">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-12 h-12 bg-gradient-primary rounded-lg flex items-center justify-center">
+                      <Clock className="w-6 h-6 text-primary-foreground" />
+                    </div>
+                    <div>
+                      <div className="text-2xl font-bold text-foreground">{result.totalDays.toLocaleString()}</div>
+                      <div className="text-muted-foreground">Total days lived</div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="shadow-card border-0">
+                <CardContent className="p-6">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-12 h-12 bg-gradient-primary rounded-lg flex items-center justify-center">
+                      <Gift className="w-6 h-6 text-primary-foreground" />
+                    </div>
+                    <div>
+                      <div className="text-2xl font-bold text-foreground">{result.daysUntilBirthday}</div>
+                      <div className="text-muted-foreground">Days until next birthday</div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default AgeCalculator;
